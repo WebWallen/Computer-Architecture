@@ -1,170 +1,156 @@
 import sys
 
+# Add values in registers 1 + 2 and store sum in register #1
+ADD = 0b10100000
+# Call subroutine (function) at address stored in register
+CALL = 0b01010000
+# Halt CPU (exit the emulator)
+HLT = 0b00000001
+# Set value of register to integer
+LDI = 0b10000010 
+# Multiply values in registers 1 + 2 and store sum in register #1
+MUL = 0b10100010
+# Pop top stack value into register
+POP = 0b01000110
+# Push register value to the stack
+PUSH = 0b01000101
+# Print number stored in register
+PRN = 0b01000111
+# Return from subroutine
+RET = 0b00010001
+# Copy (store) value in register #2 to address stored in address #1
+ST = 0b10000100
+
 class CPU:
     def __init__(self):
         # Preallocate 8 registers (arrays of binary numbers)
         self.reg = [0b0] * 8
-        # Set up PC counter with 0 for now
-        self.pc = 0
-        # Need a RAM property for read and write function
-        self.ram = [0b0] * 0xFF # FF (255) = largest number in 2 hex digits
-        # Set up Instruction Register, assign None for now
+        # Need a random access memory property to be used with the read and write function
+        self.ram = [0b0] * 256
+        # Set up Instruction Register -- command currently being excuted -- and assign None for now
         self.ir = None
-        # Initialize stack pointer, subtract 1 from available registers
+        # Initialize the program counter, which contains address to the current instruction
+        self.pc = 0
+        # Create a stack pointer, which indicates location of last item put on the stack, and subtract 1 from available registers
         self.sp = 8 - 1
-        # When an interruption occurs, store the value in below address
-        self.reg[self.sp] = 0xF4
 
-        self.OPCODES = {
-            # Add values in registers 1 + 2 and store sum in register #1
-            0b10100000: 'ADD',
-            # Call subroutine (function) at address stored in register
-            0b01010000: 'CALL',
-            # Halt CPU (exit the emulator)
-            0b00000001: 'HLT',
-            # Set value of register to integer
-            0b10000010: 'LDI', 
-            # Multiply values in registers 1 + 2 and store sum in register #1
-            0b10100010: 'MUL',
-            # Pop top stack value into register
-            0b01000110: 'POP',
-            # Push register value to the stack
-            0b01000101: 'PUSH',
-            # Print number stored in register
-            0b01000111: 'PRN',
-            # Return from subroutine
-            0b00010001: 'RET',
-            # Copy (store) value in register #2 to address stored in address #1
-            0b10000100: 'ST'
-    }
-    
-    def ram_read(self, address):
-        return self.ram[address]
+        # Dispatch Table (contains pointers to the functions associated with each binary number)
+        self.dispatch = {
+            ADD: self.add,
+            CALL: self.call,
+            LDI: self.ldi,
+            MUL: self.mul,
+            POP: self.pop,
+            PUSH: self.push,
+            PRN: self.prn,
+            RET: self.ret,
+            ST: self.st
+        }
 
-    def ram_write(self, val, address): 
-        self.ram[address] = val
-
-    # ALU means Arithmetic Logic Unit, performs all computations
+    # ALU means Arithmetic Logic Unit, performs all computations (eliminated helper function as it became obselete with dispatch table)
     def alu(self, op, reg_a, reg_b):
         if op == "ADD":
             self.reg[reg_a] += self.reg[reg_b]
         elif op == "MUL":
             self.reg[reg_a] *= self.reg[reg_b]
-        elif op == "SUB":
-            self.reg[reg_a] -= self.reg[reg_b]
         else:
             raise Exception("Unsupported ALU operation")
 
-    # Helper function for ALU that stores right data and increments
-    def alu_helper(self, op):
-        # Command comes first, register A second
-        reg_a = self.ram[self.pc + 1]
-        # Register B comes third
-        reg_b = self.ram[self.pc + 2]
-        # Pass in the data to parent function
-        self.alu(op, reg_a, reg_b)
-        # Increment by three to account for command and 2 registers
+    # Need to explicitly define this now due to the use of dispatch table
+    def add(self, op_a, op_b):
+        self.alu("ADD", op_a, op_b)
         self.pc += 3
 
-    # Call a subroutine located at address stored on register
-    def call(self):
-        # Command comes first, register address second
-        reg_add = self.ram[self.pc + 1]
-        # Return address follows command and register add
-        ret_add = self.ram[self.pc + 2]
-        # Decrement the register associated with this stack pointer
-        self.reg[self.sp] -= 1
-        # Assign the same pointer location to a value variable
-        value = self.reg[self.sp]
-        # Save the return address to the RAM location of our value
-        self.ram[value] = ret_add
-        # Store the appropriate register address a subroutine variable
-        subroutine = self.reg[reg_add]
-        # Assign the newly created subroutine variable to our PC
-        self.pc = subroutine
+    # Same as comment above
+    def mul(self, op_a, op_b):
+        self.alu("MUL", op_a, op_b)
+        self.pc += 3
     
-    # Set register value to integer
-    def ldi(self):
-        # Command itself is first element, register comes second
-        reg = self.ram[self.pc + 1]
-        # Value is the third element, after command/register
-        val = self.ram[self.pc + 2]
-        # Assign the value to the correct[register]
-        self.reg[reg] = val
-        # Increment by three to reach next command
+    # Call a subroutine located at address stored on register
+    def call(self, op_a, op_b):
+        # Assign return address (2 ahead of commnd)
+        ret_add = self.pc + 2
+        # Decrement the stack pointer of register
+        self.reg[self.sp] -= 1
+        # Attach ^ to RAM and set it equal to return address -- RAM holds register and register holds stack pointer
+        self.ram[self.reg[self.sp]] = ret_add
+        # Assign op A register to the PC
+        self.pc = self.reg[op_a] # This = performance of subroutine
+
+    # Return from a subroutine
+    def ret(self, op_a, op_b):
+        # Attach SP to register and register to RAM, then assign to ret_add (reverse of call)
+        ret_add = self.ram[self.reg[self.sp]]
+        # Increment register associated with pointer by 1 (notice the net result of 0 when combined with decrement above)
+        self.reg[self.sp] += 1
+        # Assign return address to the PC
+        self.pc = ret_add # This = exiting from the subroutine
+
+    # Set register value (A) to integer (B)
+    def ldi(self, op_a, op_b):
+        self.reg[op_a] = op_b
+        # Increment by 3 to reach the next command
         self.pc += 3
 
     # Print value from register
-    def prn(self):
-        # Command itself is first value, register comes second
-        reg = self.ram[self.pc + 1]
-        # We are printing, not storing, so we just assign to reg
-        val = self.reg[reg]
-        # Print the value in both hex and decimal format
-        print(f"Value: {val}")
+    def prn(self, op_a, op_b):
+        # Print value attached to first operation in register
+        print(self.reg[op_a])
         # Increment by 2 to reach the next command
         self.pc += 2
 
     # Push value from register, store on stack pointer
-    def push(self):
-        # Command comes first, register second
-        reg = self.ram[self.pc + 1]
-        # Assign value to appropriate register
-        val = self.reg[reg]
-        # Decrement the stack pointer by one
-        self.reg[self.sp] -= 1
-        # Store the value from register's stack pointer to RAM
-        self.ram[self.reg[self.sp]] = val
-        # Increment PC by 2 to reach our next command
+    def push(self, op_a, op_b):
+        # Decrement the stack pointer
+        self.sp -= 1
+        # Assign value on register (A) to the stack pointer stored in RAM
+        self.ram[self.sp] = self.reg[op_a]
+        # Increment +2 to reach next command
         self.pc += 2
 
     # Pop top value from stack, store in register
-    def pop(self):
-        reg = self.ram[self.pc + 1]
-        # Skip straight to storing the value (reverse of push)
-        val = self.ram[self.reg[self.sp]]
-        # Store value to the appropriate register
-        self.reg[reg] = val
-        # Increment the stack pointer by one
-        self.reg[self.sp] += 1
-        # Increment PC by 2 to reach our next command
+    def pop(self, op_a, op_b):
+        # Increment the stack pointer
+        self.sp += 1
+        # Assign the stack pointer stored in RAM to value on register (A) -- reverse of push
+        self.reg[op_a] = self.ram[self.sp]
+        # Increment +2 to reach next command
         self.pc += 2
-
-    # Return from a subroutine
-    def ret(self):
-        # Specify stack pointer in RAM as return address
-        ret_add = self.ram[self.sp]
-        # Increment register associated with pointer by 1
-        self.reg[self.sp] += 1
-        # Assign return address to the PC
-        self.pc = ret_add
 
     # Copy the value on register B to address stored for register A
-    def st(self):
-        # Register A comes after the command
-        reg_a = self.ram[self.pc + 1]
-        # Register B comes after command and Reg A
-        reg_b = self.ram[self.pc + 2]
-        # Address A is stored on the first register
-        add_a = self.reg[reg_a]
-        # Value B is stored on the second register
-        val_b = self.reg[reg_b]
-        # Specify storage address (A) on RAM and assign value location (B)
-        self.ram[add_a] = val_b
+    def st(self, op_a, op_b):
+        self.reg[op_a] = self.reg[op_b]
+        # Increment +2 for next command
         self.pc += 2
 
+    # Fetch the address of instruction stored on RAM
+    def ram_read(self, address):
+        return self.ram[address]
+
+    # Store (write) the value attached to address on RAM
+    def ram_write(self, val, address): 
+        self.ram[address] = val
+    
+    # Load the information contained within a command
     def load(self):
         address = 0
+        # Program -- ls8.py -- is first argument after python
         program = sys.argv[1]
+        # When the program opens a file...
         with open(program) as file:
+            # For each line in the file...
             for line in file:
+                # Remove any lines that [start] with a comment
                 line = line.split("#")[0].strip()
-
+                # If the line contains no relevant data (empty string)...
                 if line == '':
+                    # Continue to the next line
                     continue
-
+                # Convert the line to a binary (, 2) number and assign to value
                 value = int(line, 2)
+                # Store (assign) the value to the address contained in RAM
                 self.ram[address] = value
+                # Increment to the next instruction/command address
                 address += 1
 
     def trace(self):
@@ -188,34 +174,19 @@ class CPU:
         print()
 
     def run(self):
-        # Initialize with Boolean so we can turn "On" and "Off"
+        # Initialize with Boolean so we can turn "On" (True) and "Off" (False)
         running = True
-        # While the PC is running...
+        # While the program is running...
         while running:
             # Assign PC command stored in RAM to Instruction Register (IR)
-            self.ir = self.ram[self.pc]
-            try:
-                # Create op and assign code attached to register
-                op = self.OPCODES[self.ir]
-                if op == 'ADD' or op == 'MUL' or op == 'SUB':
-                    self.alu_helper(op)
-                if op == 'CALL':
-                    self.call()
-                elif op == 'HLT':
-                    running = False
-                if op == 'LDI':
-                    self.ldi()
-                elif op == 'PRN': 
-                    self.prn()
-                elif op == 'PUSH':
-                    self.push()
-                elif op == 'POP':
-                    self.pop()
-                elif op == 'RET':
-                    self.ret()
-                elif op == 'ST':
-                    self.st()
-            except KeyError:
-                print(f"{self.ir} is not a valid command")
-                self.pc += 1
-        pass
+            ir = self.ram[self.pc]
+            # Assign first PC address after command (typically value) to operand A
+            op_a = self.ram_read(self.pc + 1)
+            # Assign second PC address after command (typically register) to operand B
+            op_b = self.ram_read(self.pc + 2)
+            # If the PC command is HLT (halt), turn the program off
+            if ir == HLT:
+                running = False
+            # Otherwise, select the instruction register from dispatch table and pass in the operators
+            else:
+                self.dispatch[ir](op_a, op_b)
