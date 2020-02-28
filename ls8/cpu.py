@@ -1,5 +1,7 @@
 import sys
 
+# *** First, specify the address of each command/operation so they can be accessed by the CPU ***
+
 # Add values in registers 1 + 2 and store sum in register #1
 ADD = 0b10100000
 # Call subroutine (function) at address stored in register
@@ -29,6 +31,8 @@ RET = 0b00010001
 # Copy (store) value in register #2 to address stored in address #1
 ST = 0b10000100
 
+# *** Second, initialize the CPU class with: registers, RAM, instruction register, program counter, stack pointer, and flag ***
+
 class CPU:
     def __init__(self):
         # Preallocate 8 registers (arrays of binary numbers)
@@ -44,7 +48,9 @@ class CPU:
         # Adding a flag register to track jump, equal, and not equal commands
         self.fl = [0b0] * 8
 
-        # Dispatch Table (contains pointers to the functions associated with each binary number)
+# *** Third, set up a dispatch table containing pointers to functions associated with each instruction name: achieves O(1) ***
+
+        # Dispatch Table (contains pointers to the functions associated with each command)
         self.dispatch = {
             ADD: self.add,
             CALL: self.call,
@@ -61,6 +67,8 @@ class CPU:
             ST: self.st
         }
 
+# *** Fourth, write the functional logic for each part of our program (start with ALU and the five functions assocaited with it) ***
+
     # ALU means Arithmetic Logic Unit, performs all computations (eliminated helper function as it became obselete with dispatch table)
     def alu(self, op, reg_a, reg_b):
         if op == "ADD":
@@ -74,15 +82,15 @@ class CPU:
             self.fl[2] = 0
             # If first value is greater than second
             if self.reg[reg_a] > self.reg[reg_b]:
-                # Set appropriate register (0) to true
+                # Set appropriate register (0) to true (1)
                 self.fl[0] = 1
             # If the first value is less than the second
             if self.reg[reg_a] < self.reg[reg_b]:
-                # Set appropriate register (1) to true
+                # Set appropriate register (1) to true (1)
                 self.fl[1] = 1
             # Otherwise (the values are equal)
             else:
-                # Set appropriate register (2) to true
+                # Set appropriate register (2) to true (1)
                 self.fl[2] = 1
         elif op == "JEQ":
             # If the "equal" flag (2) is set to 1 (true)
@@ -90,7 +98,7 @@ class CPU:
                 # Jump to that register
                 self.jmp(reg_a, reg_b)
             else:
-                # Increment counter
+                # Increment counter (accounting for both registers)
                 self.pc += 2
         elif op == "JNE":
             # If the "equal" flag (2) is set to 0 (false)
@@ -98,7 +106,7 @@ class CPU:
                 # Jump to that register
                 self.jmp(reg_a, reg_b)
             else: 
-                # Increment counter
+                # Increment counter (accounting for both registers)
                 self.pc += 2
         else:
             raise Exception("Unsupported ALU operation")
@@ -106,6 +114,7 @@ class CPU:
     # Need to explicitly define this now due to the use of dispatch table
     def add(self, op_a, op_b):
         self.alu("ADD", op_a, op_b)
+        # Increment must account for command and both registers
         self.pc += 3
 
     # Same as comment above
