@@ -4,8 +4,16 @@ import sys
 ADD = 0b10100000
 # Call subroutine (function) at address stored in register
 CALL = 0b01010000
+# Compare the values stored in two registers
+CMP = 0b10100111
 # Halt CPU (exit the emulator)
 HLT = 0b00000001
+# If equal flag is set (true), jump to address stored in register
+JEQ = 0b01010101
+# Jump to the address stored in register
+JMP = 0b01010100
+# If not equal (false), jump to address stored in register
+JNE = 0b01010110
 # Set value of register to integer
 LDI = 0b10000010 
 # Multiply values in registers 1 + 2 and store sum in register #1
@@ -33,11 +41,17 @@ class CPU:
         self.pc = 0
         # Create a stack pointer, which indicates location of last item put on the stack, and subtract 1 from available registers
         self.sp = 8 - 1
+        # Adding a flag register to track jump, equal, and not equal commands
+        self.fl = [0b0] * 8
 
         # Dispatch Table (contains pointers to the functions associated with each binary number)
         self.dispatch = {
             ADD: self.add,
             CALL: self.call,
+            CMP: self.cmp,
+            JEQ: self.jeq,
+            JNE: self.jne,
+            JMP: self.jmp,
             LDI: self.ldi,
             MUL: self.mul,
             POP: self.pop,
@@ -53,6 +67,39 @@ class CPU:
             self.reg[reg_a] += self.reg[reg_b]
         elif op == "MUL":
             self.reg[reg_a] *= self.reg[reg_b]
+        elif op == "CMP":
+        # Has three flags: greater (0), less (1), equal (2)
+            self.fl[0] = 0 
+            self.fl[1] = 0
+            self.fl[2] = 0
+            # If first value is greater than second
+            if self.reg[reg_a] > self.reg[reg_b]:
+                # Set appropriate register (0) to true
+                self.fl[0] = 1
+            # If the first value is less than the second
+            if self.reg[reg_a] < self.reg[reg_b]:
+                # Set appropriate register (1) to true
+                self.fl[1] = 1
+            # Otherwise (the values are equal)
+            else:
+                # Set appropriate register (2) to true
+                self.fl[2] = 1
+        elif op == "JEQ":
+            # If the "equal" flag (2) is set to 1 (true)
+            if self.fl[2] == 1:
+                # Jump to that register
+                self.jmp(reg_a, reg_b)
+            else:
+                # Increment counter
+                self.pc += 2
+        elif op == "JNE":
+            # If the "equal" flag (2) is set to 0 (false)
+            if self.fl[2] == 0:
+                # Jump to that register
+                self.jmp(reg_a, reg_b)
+            else: 
+                # Increment counter
+                self.pc += 2
         else:
             raise Exception("Unsupported ALU operation")
 
@@ -65,6 +112,23 @@ class CPU:
     def mul(self, op_a, op_b):
         self.alu("MUL", op_a, op_b)
         self.pc += 3
+
+    # Compare the two values (a, b) and increment by three
+    def cmp(self, op_a, op_b):
+        self.alu("CMP", op_a, op_b)
+        self.pc += 3
+
+    # If equal (true), jump to the address (increment handled in ALU)
+    def jeq(self, op_a, op_b):
+        self.alu("JEQ", op_a, op_b)
+
+    # If not equal (false), jump to the address (ditto ^)
+    def jne(self, op_a, op_b):
+        self.alu("JNE", op_a, op_b)
+
+    # Set PC to address stored in given register
+    def jmp(self, op_a, op_b):
+        self.pc = self.reg[op_a]
     
     # Call a subroutine located at address stored on register
     def call(self, op_a, op_b):
