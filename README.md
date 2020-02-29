@@ -9,6 +9,14 @@
 ### Day 1: Get `print8.ls8` running
 
 - [ ] Inventory what is here
+      Print8 and PrintStr: do exactly what the file name suggests
+      Call: list of operations associated with different binary numbers
+      Mult: multiplies/prints two numbers attached to different registers
+      Stack: pointer to top element, instructions RE: when/what to push and pop
+      Keyboard: addresses associated with what happens upon different key presses
+      Interrupts: alert CPU when events need to be handled, saves work to prevent loss
+      Stack Overflow: overloaded memory with so many variables/calls it can't fit on stack
+
 - [ ] Implement the `CPU` constructor
 - [ ] Add RAM functions `ram_read()` and `ram_write()`
 - [ ] Implement the core of `run()`
